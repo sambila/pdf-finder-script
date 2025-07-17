@@ -1,0 +1,53 @@
+# PDF Finder Script .gitignore
+
+# Generated reports
+pdf_report.txt
+*.pdf_report.txt
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+*.out
+*.err
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Test directories
+test/
+tests/
+testing/
+
+# Local configuration
+.env
+.env.local
+config.local
+
+# Archive files
+*.zip
+*.tar.gz
+*.tgz
+*.tar.bz2
