@@ -5,18 +5,21 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.1
+# Version: 1.1.2
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
-# Constants
+# Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.1"
+readonly SCRIPT_VERSION="1.1.2"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
-readonly TEMP_DIR=$(mktemp -d)
 
-# Global variables (not readonly)
+# Temporary directory
+TEMP_DIR=$(mktemp -d)
+readonly TEMP_DIR
+
+# Global variables - NOT readonly so they can be modified
 OUTPUT_FILE="$DEFAULT_OUTPUT_FILE"
 QUIET=false
 DEBUG=false
@@ -185,6 +188,8 @@ parse_args() {
                 ;;
         esac
     done
+    
+    return 0
 }
 
 # Main function
@@ -302,6 +307,8 @@ EOF
         log_error "Failed to search for PDF files"
         return 1
     fi
+    
+    return 0
 }
 
 # Script entry point
