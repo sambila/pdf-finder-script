@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-07-18
+
+### Fixed
+- Fixed readonly variable bug that prevented script execution
+- Improved cross-platform compatibility for date and stat commands
+- Better error handling for systems without `bc` command
+- Fixed quiet mode not being respected in all log functions
+
+### Changed
+- Variables are now properly scoped (readonly vs mutable)
+- Enhanced fallback mechanisms for missing system tools
+- Improved logging function behavior
+
 ## [1.1.0] - 2025-07-17
 
 ### Added
@@ -23,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive logging system (info, warn, error, success)
 - Temporary directory cleanup on exit
 - Race condition protection for file operations
+- MIT License
+- Comprehensive documentation (INSTALL.md, CONTRIBUTING.md)
+- GitHub issue and PR templates
+- .gitignore for better repository hygiene
 
 ### Changed
 - Improved script structure with functions
@@ -32,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Improved cross-platform compatibility
 - Enhanced report format with ISO timestamps
 - Better memory usage with streaming operations
+- Complete README overhaul with badges and better structure
 
 ### Fixed
 - Fixed potential security issues with file paths
