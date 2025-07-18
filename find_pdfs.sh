@@ -5,14 +5,14 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.4
+# Version: 1.1.5
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.4"
+readonly SCRIPT_VERSION="1.1.5"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 
 # Temporary directory
@@ -246,90 +246,94 @@ EOF
     
     log_info "Searching for PDF files..."
     
-    # Find PDF files with improved error handling
-    if find . -type f \( -iname "*.pdf" \) -print0 2>/dev/null | \
-        while IFS= read -r -d '' file; do
-            # Skip if file doesn't exist (race condition protection)
-            [[ ! -f "$file" ]] && continue
-            
-            # Get file size safely
-            if [[ -r "$file" ]]; then
-                local size
-                # Try different stat commands for cross-platform compatibility
-                if command -v stat >/dev/null 2>&1; then
-                    # Linux
-                    size=$(stat -c%s "$file" 2>/dev/null) || \
-                    # macOS
-                    size=$(stat -f%z "$file" 2>/dev/null) || \
-                    size="0"
-                else
-                    size="0"
-                fi
-                
-                # Clean path (remove leading ./)
-                local clean_path="${file#./}"
-                
-                # Format size
-                local formatted_size
-                formatted_size=$(format_size "$size")
-                
-                # Write to temp file with proper escaping
-                printf '%s|%s|%s\n' "$clean_path" "$size" "$formatted_size" >> "$temp_file"
-            else
-                log_warn "Cannot read file: $file"
-            fi
-        done; then
-        
-        if [[ ! -s "$temp_file" ]]; then
-            log_warn "No PDF files found in current directory tree"
-            echo "No PDF files found." >> "$OUTPUT_FILE"
-            return 0
-        fi
-        
-        # Sort by size (descending) and generate report
-        sort -t'|' -k2,2nr "$temp_file" | while IFS='|' read -r filepath size formatted_size; do
-            printf "File: %s\nSize: %s\n---\n" "$filepath" "$formatted_size" >> "$OUTPUT_FILE"
-        done
-        
-        # Calculate statistics
-        total_files=$(wc -l < "$temp_file")
-        total_size=$(awk -F'|' '{sum += $2} END {print sum+0}' "$temp_file")
-        
-        # Add summary
-        {
-            echo ""
-            echo "SUMMARY"
-            echo "======="
-            echo "Total PDF files: $total_files"
-            echo "Total size: $(format_size "$total_size")"
-            
-            if (( total_files > 0 )); then
-                echo "Average size: $(format_size "$((total_size / total_files))")"
-            fi
-            
-            echo "Search completed: $(date -Iseconds 2>/dev/null || date)"
-            echo "Processing time: $(($(date +%s) - start_time)) seconds"
-        } >> "$OUTPUT_FILE"
-        
-        log_success "Report generated successfully!"
-        log_info "Found $total_files PDF files ($(format_size "$total_size"))"
-        
-        # Show preview unless in quiet mode
-        if [[ "$QUIET" == "false" ]]; then
-            echo ""
-            echo "Preview of report:"
-            echo "=================="
-            head -n 20 "$OUTPUT_FILE"
-            
-            if (( $(wc -l < "$OUTPUT_FILE") > 20 )); then
-                echo "..."
-                echo "(truncated - see $OUTPUT_FILE for full report)"
-            fi
-        fi
-        
-    else
+    # Find PDF files - simplified approach to avoid subshell issues
+    find . -type f \( -iname "*.pdf" \) -print0 2>/dev/null > "$TEMP_DIR/filelist.tmp"
+    
+    # Check if find was successful
+    if [[ $? -ne 0 ]]; then
         log_error "Failed to search for PDF files"
         return 1
+    fi
+    
+    # Process the files
+    while IFS= read -r -d '' file; do
+        # Skip if file doesn't exist (race condition protection)
+        [[ ! -f "$file" ]] && continue
+        
+        # Get file size safely
+        if [[ -r "$file" ]]; then
+            local size
+            # Try different stat commands for cross-platform compatibility
+            if command -v stat >/dev/null 2>&1; then
+                # Linux
+                size=$(stat -c%s "$file" 2>/dev/null) || \
+                # macOS
+                size=$(stat -f%z "$file" 2>/dev/null) || \
+                size="0"
+            else
+                size="0"
+            fi
+            
+            # Clean path (remove leading ./)
+            local clean_path="${file#./}"
+            
+            # Format size
+            local formatted_size
+            formatted_size=$(format_size "$size")
+            
+            # Write to temp file with proper escaping
+            printf '%s|%s|%s\n' "$clean_path" "$size" "$formatted_size" >> "$temp_file"
+        else
+            log_warn "Cannot read file: $file"
+        fi
+    done < "$TEMP_DIR/filelist.tmp"
+    
+    # Check if any PDFs were found
+    if [[ ! -s "$temp_file" ]]; then
+        log_warn "No PDF files found in current directory tree"
+        echo "No PDF files found." >> "$OUTPUT_FILE"
+        return 0
+    fi
+    
+    # Sort by size (descending) and generate report
+    sort -t'|' -k2,2nr "$temp_file" | while IFS='|' read -r filepath size formatted_size; do
+        printf "File: %s\nSize: %s\n---\n" "$filepath" "$formatted_size" >> "$OUTPUT_FILE"
+    done
+    
+    # Calculate statistics
+    total_files=$(wc -l < "$temp_file")
+    total_size=$(awk -F'|' '{sum += $2} END {print sum+0}' "$temp_file")
+    
+    # Add summary
+    {
+        echo ""
+        echo "SUMMARY"
+        echo "======="
+        echo "Total PDF files: $total_files"
+        echo "Total size: $(format_size "$total_size")"
+        
+        if (( total_files > 0 )); then
+            echo "Average size: $(format_size "$((total_size / total_files))")"
+        fi
+        
+        echo "Search completed: $(date -Iseconds 2>/dev/null || date)"
+        echo "Processing time: $(($(date +%s) - start_time)) seconds"
+    } >> "$OUTPUT_FILE"
+    
+    log_success "Report generated successfully!"
+    log_info "Found $total_files PDF files ($(format_size "$total_size"))"
+    
+    # Show preview unless in quiet mode
+    if [[ "$QUIET" == "false" ]]; then
+        echo ""
+        echo "Preview of report:"
+        echo "=================="
+        head -n 20 "$OUTPUT_FILE"
+        
+        if (( $(wc -l < "$OUTPUT_FILE") > 20 )); then
+            echo "..."
+            echo "(truncated - see $OUTPUT_FILE for full report)"
+        fi
     fi
     
     return 0
