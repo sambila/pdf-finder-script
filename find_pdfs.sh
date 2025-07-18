@@ -5,14 +5,14 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.2
+# Version: 1.1.3
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.2"
+readonly SCRIPT_VERSION="1.1.3"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 
 # Temporary directory
@@ -106,15 +106,39 @@ format_size() {
         # Linux/GNU coreutils
         numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B"
     else
-        # macOS fallback with better precision
+        # macOS fallback with simpler math
         if (( size < 1024 )); then
             echo "${size}B"
         elif (( size < 1048576 )); then
-            printf "%.1fKB" "$(echo "scale=1; $size/1024" | bc 2>/dev/null || echo "$((size/1024))")"
+            # Use integer division to avoid printf issues
+            local kb=$((size / 1024))
+            local remainder=$((size % 1024))
+            local decimal=$((remainder * 10 / 1024))
+            if (( decimal > 0 )); then
+                echo "${kb}.${decimal}KB"
+            else
+                echo "${kb}KB"
+            fi
         elif (( size < 1073741824 )); then
-            printf "%.1fMB" "$(echo "scale=1; $size/1048576" | bc 2>/dev/null || echo "$((size/1048576))")"
+            # Calculate MB
+            local mb=$((size / 1048576))
+            local remainder=$((size % 1048576))
+            local decimal=$((remainder * 10 / 1048576))
+            if (( decimal > 0 )); then
+                echo "${mb}.${decimal}MB"
+            else
+                echo "${mb}MB"
+            fi
         else
-            printf "%.1fGB" "$(echo "scale=1; $size/1073741824" | bc 2>/dev/null || echo "$((size/1073741824))")"
+            # Calculate GB
+            local gb=$((size / 1073741824))
+            local remainder=$((size % 1073741824))
+            local decimal=$((remainder * 10 / 1073741824))
+            if (( decimal > 0 )); then
+                echo "${gb}.${decimal}GB"
+            else
+                echo "${gb}GB"
+            fi
         fi
     fi
 }
