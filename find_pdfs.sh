@@ -5,14 +5,14 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.3
+# Version: 1.1.4
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.3"
+readonly SCRIPT_VERSION="1.1.4"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 
 # Temporary directory
@@ -92,7 +92,7 @@ show_version() {
     echo "$SCRIPT_NAME version $SCRIPT_VERSION"
 }
 
-# Size formatting function with improved error handling
+# Size formatting function - completely rewritten to avoid printf/bc issues
 format_size() {
     local size=$1
     
@@ -102,43 +102,43 @@ format_size() {
         return 1
     fi
     
+    # Try numfmt first (Linux)
     if command -v numfmt >/dev/null 2>&1; then
-        # Linux/GNU coreutils
-        numfmt --to=iec-i --suffix=B "$size" 2>/dev/null || echo "${size}B"
-    else
-        # macOS fallback with simpler math
-        if (( size < 1024 )); then
-            echo "${size}B"
-        elif (( size < 1048576 )); then
-            # Use integer division to avoid printf issues
-            local kb=$((size / 1024))
-            local remainder=$((size % 1024))
-            local decimal=$((remainder * 10 / 1024))
-            if (( decimal > 0 )); then
-                echo "${kb}.${decimal}KB"
-            else
-                echo "${kb}KB"
-            fi
-        elif (( size < 1073741824 )); then
-            # Calculate MB
-            local mb=$((size / 1048576))
-            local remainder=$((size % 1048576))
-            local decimal=$((remainder * 10 / 1048576))
-            if (( decimal > 0 )); then
-                echo "${mb}.${decimal}MB"
-            else
-                echo "${mb}MB"
-            fi
+        numfmt --to=iec-i --suffix=B "$size" 2>/dev/null && return 0
+    fi
+    
+    # Pure bash implementation - no external tools
+    if (( size < 1024 )); then
+        echo "${size}B"
+    elif (( size < 1048576 )); then
+        # KB calculation
+        local kb=$((size / 1024))
+        local remainder=$((size - kb * 1024))
+        local decimal=$((remainder * 10 / 1024))
+        if (( decimal > 0 )); then
+            echo "${kb}.${decimal}KB"
         else
-            # Calculate GB
-            local gb=$((size / 1073741824))
-            local remainder=$((size % 1073741824))
-            local decimal=$((remainder * 10 / 1073741824))
-            if (( decimal > 0 )); then
-                echo "${gb}.${decimal}GB"
-            else
-                echo "${gb}GB"
-            fi
+            echo "${kb}KB"
+        fi
+    elif (( size < 1073741824 )); then
+        # MB calculation
+        local mb=$((size / 1048576))
+        local remainder=$((size - mb * 1048576))
+        local decimal=$((remainder * 10 / 1048576))
+        if (( decimal > 0 )); then
+            echo "${mb}.${decimal}MB"
+        else
+            echo "${mb}MB"
+        fi
+    else
+        # GB calculation
+        local gb=$((size / 1073741824))
+        local remainder=$((size - gb * 1073741824))
+        local decimal=$((remainder * 10 / 1073741824))
+        if (( decimal > 0 )); then
+            echo "${gb}.${decimal}GB"
+        else
+            echo "${gb}GB"
         fi
     fi
 }
