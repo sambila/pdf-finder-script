@@ -5,14 +5,14 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.6
+# Version: 1.2.0
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.6"
+readonly SCRIPT_VERSION="1.2.0"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 
 # Temporary directory
@@ -70,7 +70,7 @@ USAGE:
 
 DESCRIPTION:
     Recursively finds all PDF files from the current directory and generates
-    a comprehensive report with file names, sizes, and statistics.
+    a comprehensive report with file names, sizes, MD5 checksums, and statistics.
 
 OPTIONS:
     -o, --output FILE    Output file name (default: pdf_report.txt)
@@ -83,6 +83,10 @@ EXAMPLES:
     $SCRIPT_NAME                    # Basic usage
     $SCRIPT_NAME -o my_report.txt   # Custom output file
     $SCRIPT_NAME -q                 # Quiet mode
+
+NOTE:
+    This script calculates MD5 checksums for each PDF file, which may take
+    some time for large files or directories with many PDFs.
 
 EOF
 }
@@ -140,6 +144,23 @@ format_size() {
         else
             echo "${gb}GB"
         fi
+    fi
+}
+
+# Calculate MD5 checksum
+calculate_md5() {
+    local file="$1"
+    
+    # Try different MD5 commands for cross-platform compatibility
+    if command -v md5sum >/dev/null 2>&1; then
+        # Linux
+        md5sum "$file" 2>/dev/null | cut -d' ' -f1
+    elif command -v md5 >/dev/null 2>&1; then
+        # macOS
+        md5 -q "$file" 2>/dev/null
+    else
+        # Fallback - no MD5 available
+        echo "N/A"
     fi
 }
 
@@ -222,6 +243,7 @@ main() {
     local total_files=0
     local total_size=0
     local start_time
+    local processed_count=0
     
     start_time=$(date +%s)
     
@@ -274,10 +296,23 @@ EOF
         return 0
     fi
     
+    # Count total files for progress indication
+    local total_found
+    total_found=$(grep -c . "$TEMP_DIR/filelist.tmp" 2>/dev/null || echo "0")
+    log_info "Found $total_found PDF files. Processing with MD5 checksums..."
+    
     # Process the files
     while IFS= read -r -d '' file; do
         # Skip if file doesn't exist (race condition protection)
         [[ ! -f "$file" ]] && continue
+        
+        # Increment processed count
+        ((processed_count++))
+        
+        # Show progress for larger numbers of files
+        if [[ "$QUIET" == "false" ]] && (( total_found > 10 )) && (( processed_count % 10 == 0 )); then
+            log_info "Processing file $processed_count of $total_found..."
+        fi
         
         # Get file size safely
         if [[ -r "$file" ]]; then
@@ -300,8 +335,12 @@ EOF
             local formatted_size
             formatted_size=$(format_size "$size")
             
+            # Calculate MD5 checksum
+            local md5_hash
+            md5_hash=$(calculate_md5 "$file")
+            
             # Write to temp file with proper escaping
-            printf '%s|%s|%s\n' "$clean_path" "$size" "$formatted_size" >> "$temp_file"
+            printf '%s|%s|%s|%s\n' "$clean_path" "$size" "$formatted_size" "$md5_hash" >> "$temp_file"
         else
             log_warn "Cannot read file: $file"
         fi
@@ -326,13 +365,17 @@ EOF
     fi
     
     # Sort by size (descending) and generate report
-    sort -t'|' -k2,2nr "$temp_file" | while IFS='|' read -r filepath size formatted_size; do
-        printf "File: %s\nSize: %s\n---\n" "$filepath" "$formatted_size" >> "$OUTPUT_FILE"
+    sort -t'|' -k2,2nr "$temp_file" | while IFS='|' read -r filepath size formatted_size md5_hash; do
+        printf "File: %s\nSize: %s\nMD5: %s\n---\n" "$filepath" "$formatted_size" "$md5_hash" >> "$OUTPUT_FILE"
     done
     
     # Calculate statistics
     total_files=$(wc -l < "$temp_file")
     total_size=$(awk -F'|' '{sum += $2} END {print sum+0}' "$temp_file")
+    
+    # Find duplicate files by MD5
+    local duplicates_file="$TEMP_DIR/duplicates.tmp"
+    awk -F'|' '{print $4 "|" $1}' "$temp_file" | sort | uniq -d -f0 > "$duplicates_file" 2>/dev/null || true
     
     # Add summary
     {
@@ -346,6 +389,23 @@ EOF
             echo "Average size: $(format_size "$((total_size / total_files))")"
         fi
         
+        # Add duplicate information if any found
+        if [[ -s "$duplicates_file" ]]; then
+            local duplicate_count
+            duplicate_count=$(wc -l < "$duplicates_file")
+            echo ""
+            echo "DUPLICATES DETECTED"
+            echo "==================="
+            echo "Files with identical MD5 checksums: $duplicate_count"
+            echo ""
+            while IFS='|' read -r md5_hash filepath; do
+                echo "MD5: $md5_hash"
+                echo "File: $filepath"
+                echo "---"
+            done < "$duplicates_file"
+        fi
+        
+        echo ""
         echo "Search completed: $(date -Iseconds 2>/dev/null || date)"
         echo "Processing time: $(($(date +%s) - start_time)) seconds"
     } >> "$OUTPUT_FILE"
@@ -353,14 +413,21 @@ EOF
     log_success "Report generated successfully!"
     log_info "Found $total_files PDF files ($(format_size "$total_size"))"
     
+    # Show duplicate information
+    if [[ -s "$duplicates_file" ]]; then
+        local duplicate_count
+        duplicate_count=$(wc -l < "$duplicates_file")
+        log_warn "Found $duplicate_count potential duplicate files (same MD5)"
+    fi
+    
     # Show preview unless in quiet mode
     if [[ "$QUIET" == "false" ]]; then
         echo ""
         echo "Preview of report:"
         echo "=================="
-        head -n 20 "$OUTPUT_FILE"
+        head -n 25 "$OUTPUT_FILE"
         
-        if (( $(wc -l < "$OUTPUT_FILE") > 20 )); then
+        if (( $(wc -l < "$OUTPUT_FILE") > 25 )); then
             echo "..."
             echo "(truncated - see $OUTPUT_FILE for full report)"
         fi
