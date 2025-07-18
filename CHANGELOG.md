@@ -5,6 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2025-07-18
+
+### Fixed
+- Fixed find command exit code handling that caused false failures
+- Improved error handling for "no files found" scenarios
+- Better distinction between real errors and empty results
+- Enhanced exit code logic to handle find's behavior correctly
+
+### Changed
+- Replaced pipe-based file processing with temporary file approach
+- Improved error messages for different failure scenarios
+- Better handling of empty directory trees
+
+## [1.1.5] - 2025-07-18
+
+### Fixed
+- Fixed subshell exit code issue that caused script to fail despite finding PDFs
+- Removed problematic pipe construction that caused false failures
+- Improved file processing workflow with separate find and process steps
+
+### Changed
+- Separated find operation from file processing to avoid subshell issues
+- Enhanced error detection and reporting
+
+## [1.1.4] - 2025-07-18
+
+### Fixed
+- Completely eliminated printf decimal number issues
+- Removed all dependencies on `bc` command
+- Fixed float formatting problems that caused script failures
+
+### Changed
+- Rewrote size formatting function using pure bash integer arithmetic
+- Replaced all external tool dependencies with native bash operations
+- Improved cross-platform compatibility by removing `bc` dependency
+
+## [1.1.3] - 2025-07-18
+
+### Fixed
+- Fixed printf issues with decimal numbers in size formatting
+- Improved integer-based calculation for file sizes
+- Better handling of floating-point calculations without external tools
+
+### Changed
+- Enhanced size formatting with safer mathematical operations
+
+## [1.1.2] - 2025-07-18
+
+### Fixed
+- Fixed readonly variable bug completely
+- Improved variable scoping to prevent conflicts
+- Better separation of constants and mutable variables
+
+### Changed
+- Reorganized variable declarations for clarity
+- Enhanced cross-platform compatibility for date and stat commands
+
 ## [1.1.1] - 2025-07-18
 
 ### Fixed
