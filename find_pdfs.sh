@@ -5,16 +5,21 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.0
+# Version: 1.1.1
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.0"
-readonly OUTPUT_FILE="pdf_report.txt"
+readonly SCRIPT_VERSION="1.1.1"
+readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 readonly TEMP_DIR=$(mktemp -d)
+
+# Global variables (not readonly)
+OUTPUT_FILE="$DEFAULT_OUTPUT_FILE"
+QUIET=false
+DEBUG=false
 
 # Colors for output
 readonly RED='\033[0;31m'
@@ -35,6 +40,7 @@ trap cleanup EXIT INT TERM
 
 # Logging functions
 log_info() {
+    [[ "$QUIET" == "true" ]] && return
     echo -e "${BLUE}[INFO]${NC} $1" >&2
 }
 
@@ -47,6 +53,7 @@ log_error() {
 }
 
 log_success() {
+    [[ "$QUIET" == "true" ]] && return
     echo -e "${GREEN}[SUCCESS]${NC} $1" >&2
 }
 
@@ -100,11 +107,11 @@ format_size() {
         if (( size < 1024 )); then
             echo "${size}B"
         elif (( size < 1048576 )); then
-            printf "%.1fKB" "$(bc -l <<< "scale=1; $size/1024" 2>/dev/null || echo "$((size/1024))")"
+            printf "%.1fKB" "$(echo "scale=1; $size/1024" | bc 2>/dev/null || echo "$((size/1024))")"
         elif (( size < 1073741824 )); then
-            printf "%.1fMB" "$(bc -l <<< "scale=1; $size/1048576" 2>/dev/null || echo "$((size/1048576))")"
+            printf "%.1fMB" "$(echo "scale=1; $size/1048576" | bc 2>/dev/null || echo "$((size/1048576))")"
         else
-            printf "%.1fGB" "$(bc -l <<< "scale=1; $size/1073741824" 2>/dev/null || echo "$((size/1073741824))")"
+            printf "%.1fGB" "$(echo "scale=1; $size/1073741824" | bc 2>/dev/null || echo "$((size/1073741824))")"
         fi
     fi
 }
@@ -138,15 +145,11 @@ validate_output_file() {
 
 # Parse command line arguments
 parse_args() {
-    local output_file="$OUTPUT_FILE"
-    local quiet=false
-    local debug=false
-    
     while [[ $# -gt 0 ]]; do
         case $1 in
             -o|--output)
                 if [[ -n "${2:-}" ]]; then
-                    output_file="$2"
+                    OUTPUT_FILE="$2"
                     shift 2
                 else
                     log_error "Option $1 requires an argument"
@@ -162,11 +165,11 @@ parse_args() {
                 exit 0
                 ;;
             -q|--quiet)
-                quiet=true
+                QUIET=true
                 shift
                 ;;
             -d|--debug)
-                debug=true
+                DEBUG=true
                 set -x
                 shift
                 ;;
@@ -182,11 +185,6 @@ parse_args() {
                 ;;
         esac
     done
-    
-    # Export variables for use in main function
-    export OUTPUT_FILE="$output_file"
-    export QUIET="$quiet"
-    export DEBUG="$debug"
 }
 
 # Main function
@@ -203,24 +201,24 @@ main() {
         return 1
     fi
     
-    [[ "$QUIET" == "false" ]] && log_info "Starting PDF search from: $(pwd)"
-    [[ "$QUIET" == "false" ]] && log_info "Output file: $OUTPUT_FILE"
+    log_info "Starting PDF search from: $(pwd)"
+    log_info "Output file: $OUTPUT_FILE"
     
     # Create report header
     cat > "$OUTPUT_FILE" << EOF
 PDF FILES REPORT
 ================
-Generated: $(date -Iseconds)
+Generated: $(date -Iseconds 2>/dev/null || date)
 Start directory: $(pwd)
-System: $(uname -s) $(uname -r)
+System: $(uname -s) $(uname -r 2>/dev/null || echo "")
 Script version: $SCRIPT_VERSION
 
 EOF
     
-    [[ "$QUIET" == "false" ]] && log_info "Searching for PDF files..."
+    log_info "Searching for PDF files..."
     
     # Find PDF files with improved error handling
-    if ! find . -type f \( -iname "*.pdf" \) -print0 2>/dev/null | \
+    if find . -type f \( -iname "*.pdf" \) -print0 2>/dev/null | \
         while IFS= read -r -d '' file; do
             # Skip if file doesn't exist (race condition protection)
             [[ ! -f "$file" ]] && continue
@@ -228,7 +226,16 @@ EOF
             # Get file size safely
             if [[ -r "$file" ]]; then
                 local size
-                size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "0")
+                # Try different stat commands for cross-platform compatibility
+                if command -v stat >/dev/null 2>&1; then
+                    # Linux
+                    size=$(stat -c%s "$file" 2>/dev/null) || \
+                    # macOS
+                    size=$(stat -f%z "$file" 2>/dev/null) || \
+                    size="0"
+                else
+                    size="0"
+                fi
                 
                 # Clean path (remove leading ./)
                 local clean_path="${file#./}"
@@ -240,7 +247,7 @@ EOF
                 # Write to temp file with proper escaping
                 printf '%s|%s|%s\n' "$clean_path" "$size" "$formatted_size" >> "$temp_file"
             else
-                [[ "$QUIET" == "false" ]] && log_warn "Cannot read file: $file"
+                log_warn "Cannot read file: $file"
             fi
         done; then
         
@@ -271,12 +278,12 @@ EOF
                 echo "Average size: $(format_size "$((total_size / total_files))")"
             fi
             
-            echo "Search completed: $(date -Iseconds)"
+            echo "Search completed: $(date -Iseconds 2>/dev/null || date)"
             echo "Processing time: $(($(date +%s) - start_time)) seconds"
         } >> "$OUTPUT_FILE"
         
         log_success "Report generated successfully!"
-        [[ "$QUIET" == "false" ]] && log_info "Found $total_files PDF files ($(format_size "$total_size"))"
+        log_info "Found $total_files PDF files ($(format_size "$total_size"))"
         
         # Show preview unless in quiet mode
         if [[ "$QUIET" == "false" ]]; then
