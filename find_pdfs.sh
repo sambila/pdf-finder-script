@@ -5,14 +5,14 @@
 # Works on macOS and Linux/Debian systems
 # 
 # Author: PDF Finder Script
-# Version: 1.1.5
+# Version: 1.1.6
 # License: MIT
 
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # Constants - only these are readonly
 readonly SCRIPT_NAME="$(basename "$0")"
-readonly SCRIPT_VERSION="1.1.5"
+readonly SCRIPT_VERSION="1.1.6"
 readonly DEFAULT_OUTPUT_FILE="pdf_report.txt"
 
 # Temporary directory
@@ -246,13 +246,32 @@ EOF
     
     log_info "Searching for PDF files..."
     
-    # Find PDF files - simplified approach to avoid subshell issues
-    find . -type f \( -iname "*.pdf" \) -print0 2>/dev/null > "$TEMP_DIR/filelist.tmp"
+    # Find PDF files - use explicit error handling instead of relying on set -e
+    local find_result=0
+    find . -type f \( -iname "*.pdf" \) -print0 > "$TEMP_DIR/filelist.tmp" 2>/dev/null || find_result=$?
     
-    # Check if find was successful
-    if [[ $? -ne 0 ]]; then
-        log_error "Failed to search for PDF files"
+    # Only treat it as an error if find actually failed (not just found no files)
+    if [[ $find_result -ne 0 ]] && [[ $find_result -ne 1 ]]; then
+        log_error "Failed to search for PDF files (find returned $find_result)"
         return 1
+    fi
+    
+    # Check if the file list is empty
+    if [[ ! -s "$TEMP_DIR/filelist.tmp" ]]; then
+        log_warn "No PDF files found in current directory tree"
+        cat >> "$OUTPUT_FILE" << EOF
+
+No PDF files found.
+
+SUMMARY
+=======
+Total PDF files: 0
+Total size: 0B
+Search completed: $(date -Iseconds 2>/dev/null || date)
+Processing time: $(($(date +%s) - start_time)) seconds
+EOF
+        log_info "Search completed - no PDFs found"
+        return 0
     fi
     
     # Process the files
@@ -288,10 +307,21 @@ EOF
         fi
     done < "$TEMP_DIR/filelist.tmp"
     
-    # Check if any PDFs were found
+    # Check if any valid PDFs were processed
     if [[ ! -s "$temp_file" ]]; then
-        log_warn "No PDF files found in current directory tree"
-        echo "No PDF files found." >> "$OUTPUT_FILE"
+        log_warn "No readable PDF files found"
+        cat >> "$OUTPUT_FILE" << EOF
+
+No readable PDF files found.
+
+SUMMARY
+=======
+Total PDF files: 0
+Total size: 0B
+Search completed: $(date -Iseconds 2>/dev/null || date)
+Processing time: $(($(date +%s) - start_time)) seconds
+EOF
+        log_info "Search completed - no readable PDFs found"
         return 0
     fi
     
